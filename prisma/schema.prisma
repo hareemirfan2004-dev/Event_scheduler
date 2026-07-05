@@ -1,0 +1,78 @@
+// Family Scheduler data model.
+// Portable across SQLite (local dev) and Postgres (production):
+// no enums, calendar dates stored as "YYYY-MM-DD" strings to avoid
+// timezone drift on whole-day semantics.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+  runtime  = "nodejs"
+}
+
+datasource db {
+  provider = "sqlite"
+  // Connection URL lives in prisma.config.ts (Prisma 7 convention).
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  members   Member[]
+  events    Event[]
+}
+
+model Member {
+  id          String      @id @default(cuid())
+  groupId     String
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name        String
+  token       String      @unique
+  createdAt   DateTime    @default(now())
+  responses   Response[]
+  busyEntries BusyEntry[]
+
+  @@unique([groupId, name])
+}
+
+model Event {
+  id           String      @id @default(cuid())
+  groupId      String
+  group        Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title        String
+  mode         String      @default("DAY") // "DAY" | "SLOT"
+  windowStart  String // YYYY-MM-DD, first candidate date
+  windowEnd    String // YYYY-MM-DD, last candidate date (inclusive)
+  durationDays Int         @default(1) // consecutive days needed (DAY mode)
+  createdAt    DateTime    @default(now())
+  responses    Response[]
+  busyEntries  BusyEntry[]
+}
+
+// A member has "responded" to an event once they save availability,
+// even if they marked nothing busy (= free the whole window).
+model Response {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  respondedAt DateTime @default(now())
+
+  @@unique([eventId, memberId])
+}
+
+// Only busy time is stored; anything unmarked is free.
+model BusyEntry {
+  id       String @id @default(cuid())
+  eventId  String
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  date     String // YYYY-MM-DD
+  slot     String @default("ALL") // "ALL" (DAY mode) | "MORNING" | "AFTERNOON" | "EVENING"
+
+  @@unique([eventId, memberId, date, slot])
+  @@index([eventId])
+}

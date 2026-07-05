@@ -31,6 +31,9 @@
 *.db
 *.db-journal
 
+# generated prisma client (rebuilt via `prisma generate` on install)
+/lib/generated/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
