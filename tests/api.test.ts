@@ -4,7 +4,7 @@ import { POST as createGroup } from "@/app/api/groups/route";
 import { GET as getGroup } from "@/app/api/groups/[code]/route";
 import { POST as joinGroup } from "@/app/api/groups/[code]/join/route";
 import { POST as createEvent } from "@/app/api/groups/[code]/events/route";
-import { GET as getEvent } from "@/app/api/events/[id]/route";
+import { GET as getEvent, DELETE as deleteEvent } from "@/app/api/events/[id]/route";
 import { PUT as putAvailability } from "@/app/api/events/[id]/availability/route";
 
 const createdGroupIds: string[] = [];
@@ -319,5 +319,118 @@ describe("PUT /api/events/[id]/availability", () => {
       ctx({ id: event.id }),
     );
     expect(badSlot.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/events/[id]", () => {
+  async function makeEventWithAvailability() {
+    const { data } = await makeGroup();
+    const created = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        validEvent,
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ code: data.group.code }),
+    );
+    const { event } = await created.json();
+    await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { busyDates: ["2026-08-02"] },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ id: event.id }),
+    );
+    return { data, event };
+  }
+
+  it("requires a member token of the event's own group", async () => {
+    const { event } = await makeEventWithAvailability();
+
+    const noToken = await deleteEvent(
+      new Request(`http://test/api/events/${event.id}`, { method: "DELETE" }),
+      ctx({ id: event.id }),
+    );
+    expect(noToken.status).toBe(401);
+
+    // A member of a different group is also rejected.
+    const { data: outsider } = await makeGroup("Other Fam", "Zara");
+    const wrongGroup = await deleteEvent(
+      new Request(`http://test/api/events/${event.id}`, {
+        method: "DELETE",
+        headers: { "x-member-token": outsider.memberToken },
+      }),
+      ctx({ id: event.id }),
+    );
+    expect(wrongGroup.status).toBe(401);
+
+    // Event still exists after both rejected attempts.
+    const stillThere = await getEvent(
+      new Request(`http://test/api/events/${event.id}`),
+      ctx({ id: event.id }),
+    );
+    expect(stillThere.status).toBe(200);
+  });
+
+  it("deletes the event and its availability data for any group member", async () => {
+    const { data, event } = await makeEventWithAvailability();
+
+    // A second member (not the creator) may delete — family trust model.
+    const ali = await joinGroup(
+      jsonRequest(`http://test/api/groups/${data.group.code}/join`, "POST", {
+        name: "Ali",
+      }),
+      ctx({ code: data.group.code }),
+    );
+    const aliToken = (await ali.json()).memberToken;
+
+    const res = await deleteEvent(
+      new Request(`http://test/api/events/${event.id}`, {
+        method: "DELETE",
+        headers: { "x-member-token": aliToken },
+      }),
+      ctx({ id: event.id }),
+    );
+    expect(res.status).toBe(200);
+
+    const gone = await getEvent(
+      new Request(`http://test/api/events/${event.id}`),
+      ctx({ id: event.id }),
+    );
+    expect(gone.status).toBe(404);
+
+    // Cascade cleaned up the availability rows.
+    const leftoverBusy = await prisma.busyEntry.count({
+      where: { eventId: event.id },
+    });
+    const leftoverResponses = await prisma.response.count({
+      where: { eventId: event.id },
+    });
+    expect(leftoverBusy).toBe(0);
+    expect(leftoverResponses).toBe(0);
+  });
+
+  it("404s for an already-deleted or unknown event", async () => {
+    const { data, event } = await makeEventWithAvailability();
+    const auth = { "x-member-token": data.memberToken };
+
+    await deleteEvent(
+      new Request(`http://test/api/events/${event.id}`, {
+        method: "DELETE",
+        headers: auth,
+      }),
+      ctx({ id: event.id }),
+    );
+    const again = await deleteEvent(
+      new Request(`http://test/api/events/${event.id}`, {
+        method: "DELETE",
+        headers: auth,
+      }),
+      ctx({ id: event.id }),
+    );
+    expect(again.status).toBe(404);
   });
 });

@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client/api";
 import { useIdentity } from "@/lib/client/identity";
 import type { EventPayload } from "@/lib/client/types";
@@ -9,11 +10,76 @@ import { fmtRange } from "@/lib/format";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { ResultsView } from "@/components/results-view";
 
+function DeleteEvent({
+  eventId,
+  token,
+  onDeleted,
+}: {
+  eventId: string;
+  token: string;
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function doDelete() {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/events/${eventId}`, { method: "DELETE", token });
+      onDeleted();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Could not delete — try again",
+      );
+      setBusy(false);
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="text-sm font-medium text-strike underline-offset-2 hover:underline"
+      >
+        Delete this event
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-strike/30 bg-strike-wash p-3">
+      <p className="text-sm text-ink">
+        Delete for everyone? All saved availability goes with it.
+      </p>
+      {error && <p className="mt-1 text-sm text-strike">{error}</p>}
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={() => void doDelete()}
+          disabled={busy}
+          className="rounded-xl bg-strike px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {busy ? "Deleting…" : "Yes, delete"}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          className="rounded-xl border border-hairline bg-card px-4 py-2 text-sm font-semibold text-ink"
+        >
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function EventPage({
   params,
 }: {
   params: Promise<{ code: string; id: string }>;
 }) {
+  const router = useRouter();
   const { code, id } = use(params);
   const upperCode = code.toUpperCase();
 
@@ -122,6 +188,16 @@ export default function EventPage({
           <ResultsView payload={payload} />
         )}
       </div>
+
+      {identity && (
+        <div className="mt-10">
+          <DeleteEvent
+            eventId={event.id}
+            token={identity.memberToken}
+            onDeleted={() => router.push(`/g/${upperCode}`)}
+          />
+        </div>
+      )}
     </main>
   );
 }

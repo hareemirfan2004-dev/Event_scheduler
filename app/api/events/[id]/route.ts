@@ -1,6 +1,24 @@
 import { prisma } from "@/lib/db";
-import { jsonError } from "@/lib/api-helpers";
+import { jsonError, memberFromToken } from "@/lib/api-helpers";
 import { computeMatches, type EventMode, type Slot } from "@/lib/matching";
+
+// Any member of the event's group may delete it (family trust model —
+// events don't record a creator). Availability rows go with it via
+// onDelete: Cascade.
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params;
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) return jsonError(404, "Event not found");
+
+  const member = await memberFromToken(req, event.groupId);
+  if (!member) return jsonError(401, "Only group members can delete events");
+
+  await prisma.event.delete({ where: { id } });
+  return Response.json({ deleted: true });
+}
 
 export async function GET(
   _req: Request,
