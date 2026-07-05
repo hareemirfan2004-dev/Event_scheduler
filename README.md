@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Saath — find the day everyone's free
 
-## Getting Started
+A small web app for groups (built for one big family) that answers one
+question: **when can we all actually meet?**
 
-First, run the development server:
+- Create a group once, share the invite link on WhatsApp.
+- Members join by typing their name — no passwords. The browser
+  remembers them; rejoining with the same name from a new device asks
+  "is that you?" and restores the same identity.
+- Inside a group you create events ("Summer trip", "Eid dinner"). Each
+  event has a date window and, for trips, how many days in a row you
+  need.
+- Everyone crosses out the days (or morning/afternoon/evening slots)
+  they **can't** make. Saath ranks the dates where everyone — or the
+  most people — are free, and shows a green heatmap of the whole window.
+
+The name is Urdu (ساتھ, "together"). To rename the app, search for
+"Saath" — it appears only in `app/layout.tsx` metadata, the landing
+page, the two page headers, and the localStorage key prefix in
+`lib/client/identity.ts`.
+
+## Stack
+
+Next.js 16 (App Router, TypeScript), Tailwind CSS 4, Prisma 7 with
+driver adapters — SQLite locally, Postgres (Neon) in production —
+deployed on Vercel. No auth service; membership is a per-group token.
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env       # keeps the default SQLite URL
+npm install                # also runs prisma generate
+npx prisma migrate dev     # creates prisma/dev.db
+npm run dev                # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run the tests (matching engine, calendar math, API routes):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploying (free tier: GitHub + Vercel + Neon)
 
-## Learn More
+One-time setup, roughly 15 minutes:
 
-To learn more about Next.js, take a look at the following resources:
+1. **Create accounts** (all free): [github.com](https://github.com),
+   [vercel.com](https://vercel.com) (sign in with GitHub),
+   [neon.tech](https://neon.tech).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. **Neon**: create a project (e.g. `saath`). Copy the **pooled**
+   connection string (the hostname contains `-pooler`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. **Switch the schema to Postgres** (local SQLite migrations don't
+   apply to Postgres, so regenerate them once against Neon):
 
-## Deploy on Vercel
+   ```bash
+   # in prisma/schema.prisma change:  provider = "sqlite"  →  "postgresql"
+   rm -r prisma/migrations
+   # put the Neon connection string in .env as DATABASE_URL, then:
+   npx prisma migrate dev --name init
+   npm run dev   # sanity-check the app now runs against Neon
+   git add -A && git commit -m "switch to postgres for production"
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   (`lib/db.ts` picks the right driver adapter from the URL scheme
+   automatically.)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. **Push to GitHub**:
+
+   ```bash
+   gh repo create saath --private --source . --push
+   # or create the repo on github.com and: git remote add origin <url> && git push -u origin main
+   ```
+
+5. **Vercel**: *Add New Project* → import the repo → add environment
+   variable `DATABASE_URL` = the Neon pooled string → Deploy. The build
+   runs `prisma generate && prisma migrate deploy && next build`, so the
+   database schema is applied automatically.
+
+6. Open `https://<project>.vercel.app`, create your group, and share
+   the invite link.
+
+After the switch, local `npm run dev` also talks to Postgres; create a
+second (free) Neon database or branch if you want dev data separate
+from the family's real data.
+
+## How matching works
+
+Only *busy* entries are stored; unmarked time is free. A member counts
+once they've saved at least once (so "hasn't answered" ≠ "free all
+month"). For an event needing N days, every N-day window in the range
+is scored by how many responded members have no busy day inside it;
+ties go to the earliest date. Slot events score each date+slot combo
+the same way. See `lib/matching.ts` and `tests/matching.test.ts`.
