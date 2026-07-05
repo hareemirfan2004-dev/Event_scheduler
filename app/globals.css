@@ -1,26 +1,99 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Saath palette — paper calendar, ink, felt-tip pens. */
+  --color-paper: #fcfbf8;
+  --color-card: #ffffff;
+  --color-ink: #212a3b;
+  --color-ink-soft: #676e7e;
+  --color-hairline: #e7e5de;
+  --color-strike: #c14434; /* red pen: busy */
+  --color-leaf: #177b4b; /* green pen: free / actions */
+  --color-leaf-deep: #0e5c38; /* everyone-free */
+  --color-leaf-wash: #e7f2ec;
+  --color-strike-wash: #f9ece9;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-bricolage);
+  --font-sans: var(--font-instrument);
+  --font-mono: var(--font-spline-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* --- Signature: red felt-pen strike for busy days --- */
+.day-cell {
+  position: relative;
+  transition: transform 80ms ease;
+}
+.day-cell:active {
+  transform: scale(0.9);
+}
+.day-cell .strike {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.day-cell .strike line {
+  stroke: var(--color-strike);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+}
+.day-cell[data-busy="true"] .strike line {
+  animation: draw-strike 160ms ease-out forwards;
+}
+
+@keyframes draw-strike {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* --- Signature: green pen circle for the found day --- */
+.pen-circle {
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+}
+.pen-circle ellipse {
+  fill: none;
+  stroke: var(--color-leaf);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  transform: rotate(-4deg);
+  transform-origin: center;
+  animation: draw-circle 400ms ease-out 150ms forwards;
+}
+
+@keyframes draw-circle {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day-cell,
+  .day-cell:active {
+    transition: none;
+    transform: none;
+  }
+  .day-cell[data-busy="true"] .strike line,
+  .pen-circle ellipse {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Visible keyboard focus everywhere. */
+:focus-visible {
+  outline: 2px solid var(--color-leaf);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
