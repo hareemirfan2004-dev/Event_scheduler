@@ -1,0 +1,323 @@
+import { afterAll, describe, expect, it } from "vitest";
+import { prisma } from "@/lib/db";
+import { POST as createGroup } from "@/app/api/groups/route";
+import { GET as getGroup } from "@/app/api/groups/[code]/route";
+import { POST as joinGroup } from "@/app/api/groups/[code]/join/route";
+import { POST as createEvent } from "@/app/api/groups/[code]/events/route";
+import { GET as getEvent } from "@/app/api/events/[id]/route";
+import { PUT as putAvailability } from "@/app/api/events/[id]/availability/route";
+
+const createdGroupIds: string[] = [];
+
+afterAll(async () => {
+  await prisma.group.deleteMany({ where: { id: { in: createdGroupIds } } });
+});
+
+function jsonRequest(
+  url: string,
+  method: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  return new Request(url, {
+    method,
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+function ctx<T extends Record<string, string>>(params: T) {
+  return { params: Promise.resolve(params) };
+}
+
+async function makeGroup(groupName = "Test Fam", memberName = "Hareem") {
+  const res = await createGroup(
+    jsonRequest("http://test/api/groups", "POST", { groupName, memberName }),
+  );
+  const data = await res.json();
+  if (data.group?.id) createdGroupIds.push(data.group.id);
+  return { res, data };
+}
+
+describe("POST /api/groups + GET /api/groups/[code]", () => {
+  it("creates a group and returns an invite code and member token", async () => {
+    const { res, data } = await makeGroup();
+    expect(res.status).toBe(201);
+    expect(data.group.code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+    expect(data.group.name).toBe("Test Fam");
+    expect(data.memberToken).toBeTruthy();
+
+    const getRes = await getGroup(
+      new Request(`http://test/api/groups/${data.group.code}`),
+      ctx({ code: data.group.code }),
+    );
+    expect(getRes.status).toBe(200);
+    const g = await getRes.json();
+    expect(g.group.name).toBe("Test Fam");
+    expect(g.members.map((m: { name: string }) => m.name)).toEqual(["Hareem"]);
+    expect(g.events).toEqual([]);
+    // Tokens must never leak through the group endpoint.
+    expect(JSON.stringify(g)).not.toContain(data.memberToken);
+  });
+
+  it("rejects blank names and unknown codes", async () => {
+    const { res } = await makeGroup("  ", "Hareem");
+    expect(res.status).toBe(400);
+
+    const getRes = await getGroup(
+      new Request("http://test/api/groups/NOPE99"),
+      ctx({ code: "NOPE99" }),
+    );
+    expect(getRes.status).toBe(404);
+  });
+});
+
+describe("POST /api/groups/[code]/join", () => {
+  it("adds a new member and returns their token", async () => {
+    const { data } = await makeGroup();
+    const res = await joinGroup(
+      jsonRequest(`http://test/api/groups/${data.group.code}/join`, "POST", {
+        name: "Ali",
+      }),
+      ctx({ code: data.group.code }),
+    );
+    expect(res.status).toBe(201);
+    const joined = await res.json();
+    expect(joined.memberToken).toBeTruthy();
+    expect(joined.memberToken).not.toBe(data.memberToken);
+  });
+
+  it("flags a taken name, and hands back the same member when claimed", async () => {
+    const { data } = await makeGroup();
+    const clash = await joinGroup(
+      jsonRequest(`http://test/api/groups/${data.group.code}/join`, "POST", {
+        name: "hareem", // case-insensitive clash with creator "Hareem"
+      }),
+      ctx({ code: data.group.code }),
+    );
+    expect(clash.status).toBe(409);
+    expect((await clash.json()).error).toBe("name_taken");
+
+    const claim = await joinGroup(
+      jsonRequest(`http://test/api/groups/${data.group.code}/join`, "POST", {
+        name: "hareem",
+        claimExisting: true,
+      }),
+      ctx({ code: data.group.code }),
+    );
+    expect(claim.status).toBe(200);
+    const claimed = await claim.json();
+    // Same identity: the original creator token comes back.
+    expect(claimed.memberToken).toBe(data.memberToken);
+    expect(claimed.memberId).toBe(data.memberId);
+  });
+
+  it("404s for an unknown group code", async () => {
+    const res = await joinGroup(
+      jsonRequest("http://test/api/groups/NOPE99/join", "POST", { name: "X" }),
+      ctx({ code: "NOPE99" }),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+const validEvent = {
+  title: "Summer trip",
+  mode: "DAY",
+  windowStart: "2026-08-01",
+  windowEnd: "2026-08-31",
+  durationDays: 3,
+};
+
+describe("POST /api/groups/[code]/events", () => {
+  it("requires a valid member token", async () => {
+    const { data } = await makeGroup();
+    const res = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        validEvent,
+      ),
+      ctx({ code: data.group.code }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("creates an event and rejects invalid payloads", async () => {
+    const { data } = await makeGroup();
+    const auth = { "x-member-token": data.memberToken };
+
+    const res = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        validEvent,
+        auth,
+      ),
+      ctx({ code: data.group.code }),
+    );
+    expect(res.status).toBe(201);
+    const { event } = await res.json();
+    expect(event).toMatchObject({ title: "Summer trip", durationDays: 3 });
+
+    const bad = [
+      { ...validEvent, mode: "WEEK" },
+      { ...validEvent, windowEnd: "2026-07-01" }, // ends before it starts
+      { ...validEvent, title: "  " },
+      { ...validEvent, windowStart: "01-08-2026" },
+      { ...validEvent, durationDays: 0 },
+    ];
+    for (const payload of bad) {
+      const badRes = await createEvent(
+        jsonRequest(
+          `http://test/api/groups/${data.group.code}/events`,
+          "POST",
+          payload,
+          auth,
+        ),
+        ctx({ code: data.group.code }),
+      );
+      expect(badRes.status, JSON.stringify(payload)).toBe(400);
+    }
+  });
+});
+
+describe("GET /api/events/[id]", () => {
+  it("returns the event with members and computed results", async () => {
+    const { data } = await makeGroup();
+    const created = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        { ...validEvent, windowEnd: "2026-08-05", durationDays: 2 },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ code: data.group.code }),
+    );
+    const { event } = await created.json();
+
+    const res = await getEvent(
+      new Request(`http://test/api/events/${event.id}`),
+      ctx({ id: event.id }),
+    );
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.event.title).toBe("Summer trip");
+    expect(payload.group.code).toBe(data.group.code);
+    expect(payload.members).toHaveLength(1);
+    // Nobody has responded yet.
+    expect(payload.results.respondedCount).toBe(0);
+    expect(payload.results.pendingMemberIds).toEqual([data.memberId]);
+    // 5-day window, 2-day duration -> 4 candidate windows.
+    expect(payload.results.windows).toHaveLength(4);
+
+    const missing = await getEvent(
+      new Request("http://test/api/events/nope"),
+      ctx({ id: "nope" }),
+    );
+    expect(missing.status).toBe(404);
+  });
+});
+
+describe("PUT /api/events/[id]/availability", () => {
+  async function makeEventSetup() {
+    const { data } = await makeGroup();
+    const created = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        { ...validEvent, windowEnd: "2026-08-05", durationDays: 1 },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ code: data.group.code }),
+    );
+    const { event } = await created.json();
+    return { data, event };
+  }
+
+  it("requires a member token", async () => {
+    const { event } = await makeEventSetup();
+    const res = await putAvailability(
+      jsonRequest(`http://test/api/events/${event.id}/availability`, "PUT", {
+        busyDates: ["2026-08-02"],
+      }),
+      ctx({ id: event.id }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("saves busy days, marks the member responded, and replaces on re-save", async () => {
+    const { data, event } = await makeEventSetup();
+    const auth = { "x-member-token": data.memberToken };
+
+    const res = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { busyDates: ["2026-08-02", "2026-08-03"] },
+        auth,
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(res.status).toBe(200);
+
+    let payload = await (
+      await getEvent(
+        new Request(`http://test/api/events/${event.id}`),
+        ctx({ id: event.id }),
+      )
+    ).json();
+    expect(payload.results.respondedCount).toBe(1);
+    expect(payload.results.pendingMemberIds).toEqual([]);
+    const aug2 = payload.results.heatmap.find(
+      (h: { date: string }) => h.date === "2026-08-02",
+    );
+    expect(aug2.freeCount).toBe(0);
+
+    // Re-saving replaces, not accumulates.
+    await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { busyDates: ["2026-08-05"] },
+        auth,
+      ),
+      ctx({ id: event.id }),
+    );
+    payload = await (
+      await getEvent(
+        new Request(`http://test/api/events/${event.id}`),
+        ctx({ id: event.id }),
+      )
+    ).json();
+    const dates = payload.busyEntries.map((b: { date: string }) => b.date);
+    expect(dates).toEqual(["2026-08-05"]);
+  });
+
+  it("rejects malformed dates and slots", async () => {
+    const { data, event } = await makeEventSetup();
+    const auth = { "x-member-token": data.memberToken };
+
+    const badDate = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { busyDates: ["not-a-date"] },
+        auth,
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(badDate.status).toBe(400);
+
+    const badSlot = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { busySlots: [{ date: "2026-08-02", slot: "NIGHT" }] },
+        auth,
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(badSlot.status).toBe(400);
+  });
+});
