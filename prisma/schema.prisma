@@ -10,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   // Connection URL lives in prisma.config.ts (Prisma 7 convention).
 }
 
