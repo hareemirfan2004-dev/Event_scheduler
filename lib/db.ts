@@ -1,14 +1,10 @@
 import { PrismaClient } from "@/lib/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const url = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
-
 function makeClient() {
-  const adapter = url.startsWith("file:")
-    ? new PrismaBetterSqlite3({ url })
-    : new PrismaPg({ connectionString: url });
-  return new PrismaClient({ adapter });
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set (Neon Postgres connection string)");
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 }
 
 // Reuse one client across dev hot-reloads to avoid exhausting connections.
