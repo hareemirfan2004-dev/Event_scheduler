@@ -26,7 +26,7 @@
 
 ## Phase A — Free-model foundation (data, matching, API)
 
-### Task A1: Invert the matching engine to free semantics
+### Task 1: Invert the matching engine to free semantics
 
 **Files:**
 - Modify: `lib/matching.ts`
@@ -242,7 +242,7 @@ git commit -m "feat(matching): invert to free-availability semantics"
 
 ---
 
-### Task A2: Schema rename + inverting migration + client regen
+### Task 2: Schema rename + inverting migration + client regen
 
 **Files:**
 - Modify: `prisma/schema.prisma`
@@ -398,7 +398,7 @@ git commit -m "feat(db): AvailabilityEntry (free rows); invert BusyEntry in migr
 
 ---
 
-### Task A3: Point the API and client types at free rows
+### Task 3: Point the API and client types at free rows
 
 **Files:**
 - Modify: `app/api/events/[id]/availability/route.ts`
@@ -407,7 +407,7 @@ git commit -m "feat(db): AvailabilityEntry (free rows); invert BusyEntry in migr
 - Test: `tests/api.test.ts` (update availability cases)
 
 **Interfaces:**
-- Consumes: `computeMatches` with `freeEntries` (Task A1); Prisma `availabilityEntry` model (Task A2).
+- Consumes: `computeMatches` with `freeEntries` (Task 1); Prisma `availabilityEntry` model (Task 2).
 - Produces: `PUT /api/events/[id]/availability` accepts `{ freeDates: string[] }` (DAY) or `{ freeSlots: { date, slot }[] }` (SLOT); `GET /api/events/[id]` returns `freeEntries: { memberId, date, slot }[]`; `EventPayload.freeEntries`.
 
 - [ ] **Step 1: Update the API tests**
@@ -524,7 +524,7 @@ git commit -m "feat(api): read/write free availability rows"
 
 ## Phase B — Availability editor (free model + easy selection)
 
-### Task B1: Pure selection helpers (range, presets, weekends)
+### Task 4: Pure selection helpers (range, presets, weekends)
 
 **Files:**
 - Create: `lib/selection.ts`
@@ -621,13 +621,13 @@ git commit -m "feat(selection): pure range/weekend/toggle helpers"
 
 ---
 
-### Task B2: Rewrite the availability editor (free model, sticky range, presets, empty-save confirm)
+### Task 5: Rewrite the availability editor (free model, sticky range, presets, empty-save confirm)
 
 **Files:**
 - Modify: `components/availability-editor.tsx` (full rewrite)
 
 **Interfaces:**
-- Consumes: `EventPayload.freeEntries` (A3); `lib/selection.ts` (B1); PUT accepts `{ freeDates }` / `{ freeSlots }` (A3).
+- Consumes: `EventPayload.freeEntries` (Task 3); `lib/selection.ts` (Task 4); PUT accepts `{ freeDates }` / `{ freeSlots }` (Task 3).
 - Produces: the "My days/times" tab UI. No exported API change (same props: `payload, memberId, token, onSaved`).
 
 - [ ] **Step 1: Rewrite the component**
@@ -882,7 +882,7 @@ git commit -m "feat(editor): pick-free model with sticky range + presets"
 
 ---
 
-### Task B3: Flip landing + results copy to the free model
+### Task 6: Flip landing + results copy to the free model
 
 **Files:**
 - Modify: `app/page.tsx` (hero copy + `WeekMotif`)
@@ -913,7 +913,7 @@ git commit -m "feat(ui): landing + results copy for the free model"
 
 ## Phase C — Multiple groups + home hub
 
-### Task C1: Pure group-list reducers + localStorage store
+### Task 7: Pure group-list reducers + localStorage store
 
 **Files:**
 - Create: `lib/client/groups.ts`
@@ -1030,14 +1030,14 @@ git commit -m "feat(groups): per-device saved-group list store"
 
 ---
 
-### Task C2: Record groups on create/join
+### Task 8: Record groups on create/join
 
 **Files:**
 - Modify: `components/landing-forms.tsx:23-42` (createGroup)
 - Modify: `app/g/[code]/page.tsx` (JoinGate.join + open effect)
 
 **Interfaces:**
-- Consumes: `saveGroup`, `touchGroup` (C1).
+- Consumes: `saveGroup`, `touchGroup` (Task 7).
 
 - [ ] **Step 1: Save on group creation**
 
@@ -1069,7 +1069,7 @@ git commit -m "feat(groups): record groups on create/join"
 
 ---
 
-### Task C3: Home hub + back-navigation
+### Task 9: Home hub + back-navigation
 
 **Files:**
 - Create: `components/my-groups.tsx`
@@ -1077,7 +1077,7 @@ git commit -m "feat(groups): record groups on create/join"
 - Modify: `app/g/[code]/page.tsx` (home link on the Saath eyebrow)
 
 **Interfaces:**
-- Consumes: `useMyGroups`, `removeGroup` (C1).
+- Consumes: `useMyGroups`, `removeGroup` (Task 7).
 
 - [ ] **Step 1: Build the `MyGroups` hub component**
 
@@ -1131,4 +1131,4 @@ Update `C:\Users\irfan\Desktop\my_workspace\Handoffs\Scheduler_handoff.md`: note
 
 ## Self-review notes (coverage)
 
-- Spec Fix A (data/matching/API/migration) → Tasks A1–A3. Fix B (editor + selection + copy) → B1–B3. Fix C (groups) → C1–C3. Migration inversion → A2 (SQL, verified on dev). Testing plan → matching/api/selection/groups tests + run-the-app verification for components (no component-test infra exists; logic is extracted to tested helpers). Member-visibility unchanged → results-view untouched (A1 preserves result shapes; B3 is copy-only).
+- Spec Fix A (data/matching/API/migration) → Tasks 1–3. Fix B (editor + selection + copy) → Tasks 4–6. Fix C (groups) → Tasks 7–9. Migration inversion → Task 2 (SQL, verified on dev). Testing plan → matching/api/selection/groups tests + run-the-app verification for components (no component-test infra exists; logic is extracted to tested helpers). Member-visibility unchanged → results-view untouched (Task 1 preserves result shapes; Task 6 is copy-only).
