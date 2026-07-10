@@ -2,12 +2,13 @@ import { LandingForms } from "@/components/landing-forms";
 import { PenCircle } from "@/components/pen";
 
 // Decorative week strip: multiple days marked free (green) plus one circled
-// winner — the whole app in one image.
+// winner — the whole app in one image. `free` and `circled` are separate
+// flags so the winner mark never blurs into the "I'm free" green mark.
 function WeekMotif() {
   const days = [
     { n: 12, free: true },
     { n: 13, free: true },
-    { n: 14, free: true },
+    { n: 14, free: true, circled: true },
     { n: 15 },
     { n: 16 },
   ];
@@ -23,7 +24,7 @@ function WeekMotif() {
           }`}
         >
           {d.n}
-          {d.free && <PenCircle />}
+          {d.circled && <PenCircle />}
         </div>
       ))}
     </div>
