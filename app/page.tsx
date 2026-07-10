@@ -1,27 +1,29 @@
 import { LandingForms } from "@/components/landing-forms";
-import { StrikeX, PenCircle } from "@/components/pen";
+import { PenCircle } from "@/components/pen";
 
-// Decorative week strip: most days crossed out, one circled — the whole
+// Decorative week strip: one day marked free and circled — the whole
 // app in one image.
 function WeekMotif() {
   const days = [
-    { n: 12, busy: true },
-    { n: 13, busy: true },
-    { n: 14, busy: false, circled: true },
-    { n: 15, busy: true },
-    { n: 16, busy: true },
+    { n: 12 },
+    { n: 13 },
+    { n: 14, free: true },
+    { n: 15 },
+    { n: 16 },
   ];
   return (
     <div className="flex justify-center gap-2" aria-hidden="true">
       {days.map((d) => (
         <div
           key={d.n}
-          data-busy={d.busy}
-          className="day-cell relative flex h-11 w-11 items-center justify-center rounded-lg border border-hairline bg-card font-mono text-sm text-ink"
+          className={`day-cell relative flex h-11 w-11 items-center justify-center rounded-lg border font-mono text-sm ${
+            d.free
+              ? "border-leaf-deep bg-leaf text-white"
+              : "border-hairline bg-card text-ink"
+          }`}
         >
           {d.n}
-          {d.busy && <StrikeX />}
-          {d.circled && <PenCircle />}
+          {d.free && <PenCircle />}
         </div>
       ))}
     </div>
@@ -40,8 +42,8 @@ export default function LandingPage() {
         everyone&rsquo;s free.
       </h1>
       <p className="mx-auto mt-4 max-w-xs text-center text-ink-soft">
-        Everyone crosses out their busy days. Saath circles the dates that
-        work for the whole family.
+        Everyone picks the days they&rsquo;re free. Saath circles the date
+        that works for the whole family.
       </p>
 
       <div className="mt-8">
