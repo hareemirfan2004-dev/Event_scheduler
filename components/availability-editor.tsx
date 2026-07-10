@@ -73,7 +73,16 @@ export function AvailabilityEditor({
   }
 
   function tapSlot(key: string) {
-    mutate((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+    // If the day is free via its "ALL" key (from "Free anytime"), expand it
+    // into the three individual slot keys first so this tap toggles for real
+    // instead of being masked by the still-present ALL entry.
+    const date = key.split("|")[0];
+    mutate((prev) => {
+      const n = new Set(prev);
+      if (n.delete(`${date}|ALL`)) for (const s of SLOTS) n.add(`${date}|${s}`);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
   }
 
   function freeAnytime() {
