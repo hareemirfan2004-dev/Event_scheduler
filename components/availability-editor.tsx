@@ -35,12 +35,12 @@ export function AvailabilityEditor({
 
   const initialBusy = useMemo(() => {
     const set = new Set<string>();
-    for (const entry of payload.busyEntries) {
+    for (const entry of payload.freeEntries) {
       if (entry.memberId !== memberId) continue;
       set.add(event.mode === "DAY" ? entry.date : `${entry.date}|${entry.slot}`);
     }
     return set;
-  }, [payload.busyEntries, memberId, event.mode]);
+  }, [payload.freeEntries, memberId, event.mode]);
 
   const [busySet, setBusySet] = useState<Set<string>>(new Set(initialBusy));
   const [dirty, setDirty] = useState(false);

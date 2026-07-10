@@ -239,14 +239,14 @@ describe("PUT /api/events/[id]/availability", () => {
     const { event } = await makeEventSetup();
     const res = await putAvailability(
       jsonRequest(`http://test/api/events/${event.id}/availability`, "PUT", {
-        busyDates: ["2026-08-02"],
+        freeDates: ["2026-08-02"],
       }),
       ctx({ id: event.id }),
     );
     expect(res.status).toBe(401);
   });
 
-  it("saves busy days, marks the member responded, and replaces on re-save", async () => {
+  it("saves free days, marks the member responded, and replaces on re-save", async () => {
     const { data, event } = await makeEventSetup();
     const auth = { "x-member-token": data.memberToken };
 
@@ -254,7 +254,7 @@ describe("PUT /api/events/[id]/availability", () => {
       jsonRequest(
         `http://test/api/events/${event.id}/availability`,
         "PUT",
-        { busyDates: ["2026-08-02", "2026-08-03"] },
+        { freeDates: ["2026-08-02", "2026-08-03"] },
         auth,
       ),
       ctx({ id: event.id }),
@@ -272,14 +272,14 @@ describe("PUT /api/events/[id]/availability", () => {
     const aug2 = payload.results.heatmap.find(
       (h: { date: string }) => h.date === "2026-08-02",
     );
-    expect(aug2.freeCount).toBe(0);
+    expect(aug2.freeCount).toBe(1);
 
     // Re-saving replaces, not accumulates.
     await putAvailability(
       jsonRequest(
         `http://test/api/events/${event.id}/availability`,
         "PUT",
-        { busyDates: ["2026-08-05"] },
+        { freeDates: ["2026-08-05"] },
         auth,
       ),
       ctx({ id: event.id }),
@@ -290,7 +290,7 @@ describe("PUT /api/events/[id]/availability", () => {
         ctx({ id: event.id }),
       )
     ).json();
-    const dates = payload.busyEntries.map((b: { date: string }) => b.date);
+    const dates = payload.freeEntries.map((e: { date: string }) => e.date);
     expect(dates).toEqual(["2026-08-05"]);
   });
 
@@ -302,7 +302,7 @@ describe("PUT /api/events/[id]/availability", () => {
       jsonRequest(
         `http://test/api/events/${event.id}/availability`,
         "PUT",
-        { busyDates: ["not-a-date"] },
+        { freeDates: ["not-a-date"] },
         auth,
       ),
       ctx({ id: event.id }),
@@ -313,12 +313,90 @@ describe("PUT /api/events/[id]/availability", () => {
       jsonRequest(
         `http://test/api/events/${event.id}/availability`,
         "PUT",
-        { busySlots: [{ date: "2026-08-02", slot: "NIGHT" }] },
+        { freeSlots: [{ date: "2026-08-02", slot: "NIGHT" }] },
         auth,
       ),
       ctx({ id: event.id }),
     );
     expect(badSlot.status).toBe(400);
+  });
+
+  it("404s when saving availability for an unknown event", async () => {
+    const { data } = await makeGroup();
+    const res = await putAvailability(
+      jsonRequest(
+        "http://test/api/events/nope/availability",
+        "PUT",
+        { freeDates: ["2026-08-02"] },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ id: "nope" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns freeEntries and ranks the all-free window first; empty saves still count as responses", async () => {
+    const { data } = await makeGroup("Test Fam", "Ali");
+    const aliToken = data.memberToken;
+    const joined = await joinGroup(
+      jsonRequest(`http://test/api/groups/${data.group.code}/join`, "POST", {
+        name: "Bina",
+      }),
+      ctx({ code: data.group.code }),
+    );
+    const binaToken = (await joined.json()).memberToken;
+
+    const created = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        { ...validEvent, durationDays: 2 },
+        { "x-member-token": aliToken },
+      ),
+      ctx({ code: data.group.code }),
+    );
+    const { event } = await created.json();
+
+    // Save availability as FREE days.
+    const save = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { freeDates: ["2026-08-15", "2026-08-16"] },
+        { "x-member-token": aliToken },
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(save.status).toBe(200);
+
+    // GET returns freeEntries and ranks the all-free window first.
+    const ev = await (
+      await getEvent(
+        new Request(`http://test/api/events/${event.id}`),
+        ctx({ id: event.id }),
+      )
+    ).json();
+    expect(ev.freeEntries.length).toBeGreaterThan(0);
+    expect(ev.results.windows[0].startDate).toBe("2026-08-15");
+
+    // Empty free set still records a response ("can't make any").
+    const empty = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        { freeDates: [] },
+        { "x-member-token": binaToken },
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(empty.status).toBe(200);
+    const ev2 = await (
+      await getEvent(
+        new Request(`http://test/api/events/${event.id}`),
+        ctx({ id: event.id }),
+      )
+    ).json();
+    expect(ev2.results.respondedCount).toBe(2);
   });
 });
 
@@ -339,7 +417,7 @@ describe("DELETE /api/events/[id]", () => {
       jsonRequest(
         `http://test/api/events/${event.id}/availability`,
         "PUT",
-        { busyDates: ["2026-08-02"] },
+        { freeDates: ["2026-08-02"] },
         { "x-member-token": data.memberToken },
       ),
       ctx({ id: event.id }),
@@ -403,13 +481,13 @@ describe("DELETE /api/events/[id]", () => {
     expect(gone.status).toBe(404);
 
     // Cascade cleaned up the availability rows.
-    const leftoverBusy = await prisma.busyEntry.count({
+    const leftoverFree = await prisma.availabilityEntry.count({
       where: { eventId: event.id },
     });
     const leftoverResponses = await prisma.response.count({
       where: { eventId: event.id },
     });
-    expect(leftoverBusy).toBe(0);
+    expect(leftoverFree).toBe(0);
     expect(leftoverResponses).toBe(0);
   });
 

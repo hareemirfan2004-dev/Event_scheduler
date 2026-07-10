@@ -5,21 +5,21 @@ const SLOTS = new Set(["ALL", "MORNING", "AFTERNOON", "EVENING"]);
 
 type Entry = { date: string; slot: string };
 
-/** Normalize busyDates + busySlots into rows; null when anything is malformed. */
+/** Normalize freeDates + freeSlots into rows; null when anything is malformed. */
 function parseEntries(body: Record<string, unknown>): Entry[] | null {
   const entries: Entry[] = [];
 
-  if (body.busyDates !== undefined) {
-    if (!Array.isArray(body.busyDates)) return null;
-    for (const date of body.busyDates) {
+  if (body.freeDates !== undefined) {
+    if (!Array.isArray(body.freeDates)) return null;
+    for (const date of body.freeDates) {
       if (typeof date !== "string" || !ISO_DATE.test(date)) return null;
       entries.push({ date, slot: "ALL" });
     }
   }
 
-  if (body.busySlots !== undefined) {
-    if (!Array.isArray(body.busySlots)) return null;
-    for (const raw of body.busySlots) {
+  if (body.freeSlots !== undefined) {
+    if (!Array.isArray(body.freeSlots)) return null;
+    for (const raw of body.freeSlots) {
       if (typeof raw !== "object" || raw === null) return null;
       const { date, slot } = raw as Record<string, unknown>;
       if (typeof date !== "string" || !ISO_DATE.test(date)) return null;
@@ -53,13 +53,13 @@ export async function PUT(
   if (!member) return jsonError(401, "Join the group before saving availability");
 
   const entries = parseEntries(body);
-  if (entries === null) return jsonError(400, "Invalid busy dates or slots");
+  if (entries === null) return jsonError(400, "Invalid free dates or slots");
 
   await prisma.$transaction([
-    prisma.busyEntry.deleteMany({
+    prisma.availabilityEntry.deleteMany({
       where: { eventId: event.id, memberId: member.id },
     }),
-    prisma.busyEntry.createMany({
+    prisma.availabilityEntry.createMany({
       data: entries.map((e) => ({
         eventId: event.id,
         memberId: member.id,
