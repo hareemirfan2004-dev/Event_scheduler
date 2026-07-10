@@ -175,9 +175,12 @@ export default function GroupPage({
   return (
     <main className="pt-8">
       <header>
-        <p className="font-mono text-xs tracking-[0.2em] text-leaf uppercase">
-          Saath
-        </p>
+        <Link
+          href="/"
+          className="font-mono text-xs tracking-[0.2em] text-leaf uppercase"
+        >
+          ← Saath
+        </Link>
         <div className="mt-1 flex items-start justify-between gap-3">
           <h1 className="font-display text-3xl font-bold leading-tight">
             {group.name}

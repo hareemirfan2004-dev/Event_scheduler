@@ -1,5 +1,9 @@
+"use client";
+
 import { LandingForms } from "@/components/landing-forms";
+import { MyGroups } from "@/components/my-groups";
 import { PenCircle } from "@/components/pen";
+import { useMyGroups } from "@/lib/client/groups";
 
 // Decorative week strip: multiple days marked free (green) plus one circled
 // winner — the whole app in one image. `free` and `circled` are separate
@@ -32,6 +36,12 @@ function WeekMotif() {
 }
 
 export default function LandingPage() {
+  const groups = useMyGroups();
+
+  if (groups.length > 0) {
+    return <MyGroups />;
+  }
+
   return (
     <main className="pt-14">
       <p className="text-center font-mono text-sm tracking-[0.2em] text-leaf uppercase">
