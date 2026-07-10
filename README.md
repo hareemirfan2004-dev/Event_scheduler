@@ -93,3 +93,11 @@ month"). For an event needing N days, every N-day window in the range
 is scored by how many responded members have no busy day inside it;
 ties go to the earliest date. Slot events score each date+slot combo
 the same way. See `lib/matching.ts` and `tests/matching.test.ts`.
+
+## License
+
+Copyright (c) 2026 Hareem Irfan. All rights reserved.
+
+This is proprietary software — see [LICENSE](LICENSE). No permission is
+granted to use, copy, modify, or distribute this software without prior
+written consent.
