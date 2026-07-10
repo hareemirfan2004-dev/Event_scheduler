@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/client/api";
 import { saveIdentity, useIdentity } from "@/lib/client/identity";
+import { saveGroup, touchGroup } from "@/lib/client/groups";
 import type { GroupPayload } from "@/lib/client/types";
 import { Button, Card, ErrorNote, TextInput } from "@/components/atoms";
 import { NewEventForm } from "@/components/new-event-form";
@@ -40,6 +41,12 @@ function JoinGate({
         memberId: data.memberId,
         memberName: data.memberName,
         memberToken: data.memberToken,
+      });
+      saveGroup({
+        code,
+        groupName,
+        memberName: data.memberName,
+        lastOpenedAt: Date.now(),
       });
       onJoined();
     } catch (err) {
@@ -125,6 +132,7 @@ export default function GroupPage({
   const load = useCallback(async () => {
     try {
       setPayload(await api<GroupPayload>(`/api/groups/${upperCode}`));
+      touchGroup(upperCode);
     } catch (err) {
       setLoadError(
         err instanceof ApiError && err.status === 404
