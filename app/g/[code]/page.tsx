@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/client/api";
-import { saveIdentity, useIdentity } from "@/lib/client/identity";
+import { getIdentity, saveIdentity, useIdentity } from "@/lib/client/identity";
 import { saveGroup, touchGroup } from "@/lib/client/groups";
 import type { GroupPayload } from "@/lib/client/types";
 import { Button, Card, ErrorNote, TextInput } from "@/components/atoms";
@@ -131,8 +131,19 @@ export default function GroupPage({
 
   const load = useCallback(async () => {
     try {
-      setPayload(await api<GroupPayload>(`/api/groups/${upperCode}`));
-      touchGroup(upperCode);
+      const data = await api<GroupPayload>(`/api/groups/${upperCode}`);
+      setPayload(data);
+      const savedIdentity = getIdentity(upperCode);
+      if (savedIdentity) {
+        saveGroup({
+          code: upperCode,
+          groupName: data.group.name,
+          memberName: savedIdentity.memberName,
+          lastOpenedAt: Date.now(),
+        });
+      } else {
+        touchGroup(upperCode);
+      }
     } catch (err) {
       setLoadError(
         err instanceof ApiError && err.status === 404
