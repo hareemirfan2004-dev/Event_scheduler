@@ -22,6 +22,7 @@ export function removeFromList(list: SavedGroup[], code: string): SavedGroup[] {
 
 let cache: SavedGroup[] | null = null;
 const listeners = new Set<() => void>();
+const EMPTY: SavedGroup[] = [];
 
 function read(): SavedGroup[] {
   try {
@@ -50,5 +51,5 @@ export function touchGroup(code: string): void {
 function subscribe(l: () => void): () => void { listeners.add(l); return () => listeners.delete(l); }
 
 export function useMyGroups(): SavedGroup[] {
-  return useSyncExternalStore(subscribe, getGroups, () => []);
+  return useSyncExternalStore(subscribe, getGroups, () => EMPTY);
 }
