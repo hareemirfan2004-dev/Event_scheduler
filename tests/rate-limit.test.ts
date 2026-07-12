@@ -1,9 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit, POLICIES } from "@/lib/rate-limit";
 import { POST as createGroup } from "@/app/api/groups/route";
 import { GET as getGroup } from "@/app/api/groups/[code]/route";
-import { POLICIES } from "@/lib/rate-limit";
 
 // Unique prefix per run so repeat/parallel runs on the shared Neon dev
 // branch never collide with stale counter rows.

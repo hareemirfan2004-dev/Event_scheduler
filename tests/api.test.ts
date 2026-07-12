@@ -23,6 +23,7 @@ const createdGroupIds: string[] = [];
 
 afterAll(async () => {
   await prisma.group.deleteMany({ where: { id: { in: createdGroupIds } } });
+  await prisma.rateLimit.deleteMany({ where: { key: { endsWith: ":local" } } });
 });
 
 function jsonRequest(
