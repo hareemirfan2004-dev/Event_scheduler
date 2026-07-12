@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { jsonError } from "@/lib/api-helpers";
 
 export interface RateLimitPolicy {
   limit: number;
@@ -84,4 +85,16 @@ export async function rateLimit(
     console.error("rate-limit check failed (failing open):", err);
     return { allowed: true, retryAfterSeconds: 0 };
   }
+}
+
+// Route guard: null means proceed; a Response means return it as-is.
+export async function enforceRateLimit(
+  scope: PolicyScope,
+  req: Request,
+): Promise<Response | null> {
+  const result = await rateLimit(scope, clientIp(req), POLICIES[scope]);
+  if (result.allowed) return null;
+  return jsonError(429, "Too many attempts — please wait a few minutes and try again.", {
+    "Retry-After": String(result.retryAfterSeconds),
+  });
 }

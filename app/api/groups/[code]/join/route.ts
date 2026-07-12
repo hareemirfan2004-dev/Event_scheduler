@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/db";
 import { generateMemberToken } from "@/lib/codes";
 import { cleanName, jsonError, readJson } from "@/lib/api-helpers";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ code: string }> },
 ) {
+  const limited = await enforceRateLimit("join-group", req);
+  if (limited) return limited;
+
   const { code } = await ctx.params;
   const body = await readJson(req);
   if (!body) return jsonError(400, "Invalid JSON body");

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { POST as createGroup } from "@/app/api/groups/route";
 import { GET as getGroup } from "@/app/api/groups/[code]/route";
@@ -6,6 +6,18 @@ import { POST as joinGroup } from "@/app/api/groups/[code]/join/route";
 import { POST as createEvent } from "@/app/api/groups/[code]/events/route";
 import { GET as getEvent, DELETE as deleteEvent } from "@/app/api/events/[id]/route";
 import { PUT as putAvailability } from "@/app/api/events/[id]/availability/route";
+import { POLICIES } from "@/lib/rate-limit";
+
+beforeAll(() => {
+  // This suite drives the real handlers hard, all from the shared "local"
+  // bucket (no proxy headers in the harness). Raise the limits so rate
+  // limiting — tested in rate-limit.test.ts — can never flake these
+  // functional tests. Vitest isolates test files in separate workers, so
+  // this never leaks into rate-limit.test.ts.
+  for (const scope of Object.keys(POLICIES) as (keyof typeof POLICIES)[]) {
+    POLICIES[scope] = { ...POLICIES[scope], limit: 10_000 };
+  }
+});
 
 const createdGroupIds: string[] = [];
 
