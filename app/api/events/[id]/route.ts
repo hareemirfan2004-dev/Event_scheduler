@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { jsonError, memberFromToken } from "@/lib/api-helpers";
 import { computeMatches, type EventMode, type Slot } from "@/lib/matching";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 // Any member of the event's group may delete it (family trust model —
 // events don't record a creator). Availability rows go with it via
@@ -21,9 +22,12 @@ export async function DELETE(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const limited = await enforceRateLimit("read-event", req);
+  if (limited) return limited;
+
   const { id } = await ctx.params;
   const event = await prisma.event.findUnique({
     where: { id },

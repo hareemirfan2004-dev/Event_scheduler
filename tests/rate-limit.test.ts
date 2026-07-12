@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { POST as createGroup } from "@/app/api/groups/route";
+import { GET as getGroup } from "@/app/api/groups/[code]/route";
 import { POLICIES } from "@/lib/rate-limit";
 
 // Unique prefix per run so repeat/parallel runs on the shared Neon dev
@@ -91,6 +92,45 @@ describe("route guard: POST /api/groups", () => {
       );
     } finally {
       POLICIES["create-group"] = original;
+    }
+  });
+});
+
+describe("route guard: GET /api/groups/[code]", () => {
+  it("returns 429 on group reads past the read-group policy", async () => {
+    const original = POLICIES["read-group"];
+    POLICIES["read-group"] = { limit: 2, windowMs: 60_000 };
+    // Setup group is created from its own unique bucket so it can't
+    // interfere with either policy under test.
+    const setupRes = await createGroup(
+      new Request("http://test/api/groups", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": `test-ip-${runId}-read-setup`,
+        },
+        body: JSON.stringify({ groupName: "RL Read Fam", memberName: "Tester" }),
+      }),
+    );
+    const { group } = await setupRes.json();
+    createdGroupIds.push(group.id);
+
+    const ip = `test-ip-${runId}-read`;
+    const read = () =>
+      getGroup(
+        new Request(`http://test/api/groups/${group.code}`, {
+          headers: { "x-forwarded-for": ip },
+        }),
+        { params: Promise.resolve({ code: group.code }) },
+      );
+    try {
+      expect((await read()).status).toBe(200);
+      expect((await read()).status).toBe(200);
+      const r3 = await read();
+      expect(r3.status).toBe(429);
+      expect(Number(r3.headers.get("Retry-After"))).toBeGreaterThan(0);
+    } finally {
+      POLICIES["read-group"] = original;
     }
   });
 });
