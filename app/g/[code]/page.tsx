@@ -3,7 +3,8 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/client/api";
-import { saveIdentity, useIdentity } from "@/lib/client/identity";
+import { getIdentity, saveIdentity, useIdentity } from "@/lib/client/identity";
+import { saveGroup, touchGroup } from "@/lib/client/groups";
 import type { GroupPayload } from "@/lib/client/types";
 import { Button, Card, ErrorNote, TextInput } from "@/components/atoms";
 import { NewEventForm } from "@/components/new-event-form";
@@ -40,6 +41,12 @@ function JoinGate({
         memberId: data.memberId,
         memberName: data.memberName,
         memberToken: data.memberToken,
+      });
+      saveGroup({
+        code,
+        groupName,
+        memberName: data.memberName,
+        lastOpenedAt: Date.now(),
       });
       onJoined();
     } catch (err) {
@@ -124,7 +131,19 @@ export default function GroupPage({
 
   const load = useCallback(async () => {
     try {
-      setPayload(await api<GroupPayload>(`/api/groups/${upperCode}`));
+      const data = await api<GroupPayload>(`/api/groups/${upperCode}`);
+      setPayload(data);
+      const savedIdentity = getIdentity(upperCode);
+      if (savedIdentity) {
+        saveGroup({
+          code: upperCode,
+          groupName: data.group.name,
+          memberName: savedIdentity.memberName,
+          lastOpenedAt: Date.now(),
+        });
+      } else {
+        touchGroup(upperCode);
+      }
     } catch (err) {
       setLoadError(
         err instanceof ApiError && err.status === 404
@@ -167,9 +186,12 @@ export default function GroupPage({
   return (
     <main className="pt-8">
       <header>
-        <p className="font-mono text-xs tracking-[0.2em] text-leaf uppercase">
-          Saath
-        </p>
+        <Link
+          href="/"
+          className="font-mono text-xs tracking-[0.2em] text-leaf uppercase"
+        >
+          ← Saath
+        </Link>
         <div className="mt-1 flex items-start justify-between gap-3">
           <h1 className="font-display text-3xl font-bold leading-tight">
             {group.name}

@@ -26,6 +26,6 @@ export interface EventPayload {
   event: Omit<EventSummary, "createdAt">;
   group: { id: string; name: string; code: string };
   members: MemberInfo[];
-  busyEntries: { memberId: string; date: string; slot: string }[];
+  freeEntries: { memberId: string; date: string; slot: string }[];
   results: MatchResults;
 }

@@ -9,7 +9,7 @@ export interface MemberRef {
   name: string;
 }
 
-export interface BusyEntryInput {
+export interface FreeEntryInput {
   memberId: string;
   date: string; // YYYY-MM-DD
   slot: Slot;
@@ -22,7 +22,7 @@ export interface MatchInput {
   durationDays: number; // consecutive days needed (DAY mode)
   members: MemberRef[];
   respondedMemberIds: string[];
-  busyEntries: BusyEntryInput[];
+  freeEntries: FreeEntryInput[];
 }
 
 export interface WindowResult {
@@ -80,15 +80,23 @@ export function computeMatches(input: MatchInput): MatchResults {
     input.respondedMemberIds.includes(m.id),
   );
 
-  // memberId -> set of YYYY-MM-DD dates they are busy on (DAY semantics).
-  const busyDates = new Map<string, Set<string>>();
-  for (const entry of input.busyEntries) {
-    let set = busyDates.get(entry.memberId);
-    if (!set) {
-      set = new Set();
-      busyDates.set(entry.memberId, set);
+  // memberId -> set of "YYYY-MM-DD" they marked free (any slot counts for DAY).
+  const freeDates = new Map<string, Set<string>>();
+  // memberId -> set of "date|slot" free keys (ALL frees the whole day).
+  const freeSlots = new Map<string, Set<string>>();
+  for (const e of input.freeEntries) {
+    let d = freeDates.get(e.memberId);
+    if (!d) {
+      d = new Set();
+      freeDates.set(e.memberId, d);
     }
-    set.add(entry.date);
+    d.add(e.date);
+    let s = freeSlots.get(e.memberId);
+    if (!s) {
+      s = new Set();
+      freeSlots.set(e.memberId, s);
+    }
+    s.add(`${e.date}|${e.slot}`);
   }
 
   const windows: WindowResult[] = [];
@@ -99,9 +107,10 @@ export function computeMatches(input: MatchInput): MatchResults {
       const available: string[] = [];
       const unavailable: string[] = [];
       for (const m of responded) {
-        const busy = busyDates.get(m.id);
-        if (busy && windowDays.some((d) => busy.has(d))) unavailable.push(m.id);
-        else available.push(m.id);
+        const free = freeDates.get(m.id);
+        const allFree = free != null && windowDays.every((d) => free.has(d));
+        if (allFree) available.push(m.id);
+        else unavailable.push(m.id);
       }
       windows.push({
         startDate: windowDays[0],
@@ -118,25 +127,16 @@ export function computeMatches(input: MatchInput): MatchResults {
 
   const slots: SlotResult[] = [];
   if (input.mode === "SLOT") {
-    // memberId -> set of "date|slot" keys ("date|ALL" blocks the whole day).
-    const busySlots = new Map<string, Set<string>>();
-    for (const entry of input.busyEntries) {
-      let set = busySlots.get(entry.memberId);
-      if (!set) {
-        set = new Set();
-        busySlots.set(entry.memberId, set);
-      }
-      set.add(`${entry.date}|${entry.slot}`);
-    }
     for (const day of days) {
       for (const slot of DAY_SLOTS) {
         const available: string[] = [];
         const unavailable: string[] = [];
         for (const m of responded) {
-          const busy = busySlots.get(m.id);
-          if (busy && (busy.has(`${day}|${slot}`) || busy.has(`${day}|ALL`)))
-            unavailable.push(m.id);
-          else available.push(m.id);
+          const free = freeSlots.get(m.id);
+          const isFree =
+            free != null && (free.has(`${day}|${slot}`) || free.has(`${day}|ALL`));
+          if (isFree) available.push(m.id);
+          else unavailable.push(m.id);
         }
         slots.push({
           date: day,
@@ -157,7 +157,7 @@ export function computeMatches(input: MatchInput): MatchResults {
 
   const heatmap: HeatmapDay[] = days.map((day) => ({
     date: day,
-    freeCount: responded.filter((m) => !busyDates.get(m.id)?.has(day)).length,
+    freeCount: responded.filter((m) => freeDates.get(m.id)?.has(day)).length,
   }));
 
   const respondedIds = new Set(responded.map((m) => m.id));

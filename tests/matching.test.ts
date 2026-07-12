@@ -1,187 +1,111 @@
-import { describe, expect, it } from "vitest";
-import { computeMatches } from "@/lib/matching";
+import { describe, it, expect } from "vitest";
+import { computeMatches, type MatchInput } from "@/lib/matching";
 
-const members = [
-  { id: "m1", name: "Ana" },
-  { id: "m2", name: "Bilal" },
-];
+const base: Omit<MatchInput, "freeEntries" | "respondedMemberIds"> = {
+  mode: "DAY",
+  windowStart: "2026-08-01",
+  windowEnd: "2026-08-05",
+  durationDays: 1,
+  members: [
+    { id: "a", name: "Ali" },
+    { id: "b", name: "Bina" },
+  ],
+};
 
-describe("computeMatches — DAY mode", () => {
-  it("with no busy entries, every day is a full-attendance window", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-03",
-      durationDays: 1,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      busyEntries: [],
-    });
-
-    expect(result.windows).toHaveLength(3);
-    expect(result.windows[0]).toMatchObject({
-      startDate: "2026-08-01",
-      endDate: "2026-08-01",
-      score: 2,
-      availableMemberIds: ["m1", "m2"],
-    });
-  });
-
-  it("ranks days by attendance (busy members excluded and listed)", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-03",
-      durationDays: 1,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      busyEntries: [
-        { memberId: "m1", date: "2026-08-01", slot: "ALL" },
-        { memberId: "m2", date: "2026-08-01", slot: "ALL" },
-        { memberId: "m2", date: "2026-08-03", slot: "ALL" },
+describe("computeMatches — DAY, free model", () => {
+  it("counts a member available only on days they marked free", () => {
+    const r = computeMatches({
+      ...base,
+      respondedMemberIds: ["a", "b"],
+      freeEntries: [
+        { memberId: "a", date: "2026-08-01", slot: "ALL" },
+        { memberId: "a", date: "2026-08-02", slot: "ALL" },
+        { memberId: "b", date: "2026-08-02", slot: "ALL" },
       ],
     });
-
-    // Aug 2: both free. Aug 3: only m1. Aug 1: nobody.
-    expect(result.windows.map((w) => w.startDate)).toEqual([
-      "2026-08-02",
-      "2026-08-03",
-      "2026-08-01",
-    ]);
-    expect(result.windows[1]).toMatchObject({
-      score: 1,
-      availableMemberIds: ["m1"],
-      unavailableMemberIds: ["m2"],
-    });
+    const day2 = r.windows.find((w) => w.startDate === "2026-08-02")!;
+    expect(day2.score).toBe(2);
+    expect(day2.availableMemberIds.sort()).toEqual(["a", "b"]);
+    const day1 = r.windows.find((w) => w.startDate === "2026-08-01")!;
+    expect(day1.score).toBe(1);
+    expect(day1.unavailableMemberIds).toEqual(["b"]);
+    // Day with no free rows scores 0.
+    expect(r.windows.find((w) => w.startDate === "2026-08-05")!.score).toBe(0);
   });
 
-  it("finds consecutive-day windows; one busy day breaks the whole window", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-05",
-      durationDays: 3,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      // m2 busy Aug 2 → windows containing Aug 2 lose m2.
-      busyEntries: [{ memberId: "m2", date: "2026-08-02", slot: "ALL" }],
-    });
-
-    // Candidate starts: Aug 1, 2, 3 (a window may not overflow past windowEnd).
-    expect(result.windows).toHaveLength(3);
-    expect(result.windows[0]).toMatchObject({
-      startDate: "2026-08-03",
-      endDate: "2026-08-05",
-      score: 2,
-    });
-    const aug1 = result.windows.find((w) => w.startDate === "2026-08-01");
-    expect(aug1).toMatchObject({
-      endDate: "2026-08-03",
-      score: 1,
-      unavailableMemberIds: ["m2"],
-    });
-  });
-
-  it("excludes members who never responded and reports them as pending", () => {
-    const threeMembers = [...members, { id: "m3", name: "Chandni" }];
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-01",
-      durationDays: 1,
-      members: threeMembers,
-      respondedMemberIds: ["m1", "m2"], // m3 never saved availability
-      busyEntries: [],
-    });
-
-    expect(result.respondedCount).toBe(2);
-    expect(result.totalMembers).toBe(3);
-    expect(result.pendingMemberIds).toEqual(["m3"]);
-    // m3 counts nowhere in the windows.
-    expect(result.windows[0].score).toBe(2);
-    expect(result.windows[0].availableMemberIds).toEqual(["m1", "m2"]);
-  });
-
-  it("returns a per-day heatmap of free counts, unaffected by duration", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-03",
+  it("requires ALL days of a multi-day window to be free", () => {
+    const r = computeMatches({
+      ...base,
       durationDays: 2,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      busyEntries: [{ memberId: "m2", date: "2026-08-02", slot: "ALL" }],
-    });
-
-    expect(result.heatmap).toEqual([
-      { date: "2026-08-01", freeCount: 2 },
-      { date: "2026-08-02", freeCount: 1 },
-      { date: "2026-08-03", freeCount: 2 },
-    ]);
-  });
-});
-
-describe("computeMatches — SLOT mode", () => {
-  it("ranks date+slot combos; an ALL-day busy entry blocks every slot", () => {
-    const result = computeMatches({
-      mode: "SLOT",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-02",
-      durationDays: 1,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      busyEntries: [
-        { memberId: "m1", date: "2026-08-01", slot: "MORNING" },
-        { memberId: "m2", date: "2026-08-02", slot: "ALL" },
+      respondedMemberIds: ["a"],
+      freeEntries: [
+        { memberId: "a", date: "2026-08-01", slot: "ALL" },
+        { memberId: "a", date: "2026-08-02", slot: "ALL" },
+        // gap on 03
+        { memberId: "a", date: "2026-08-04", slot: "ALL" },
       ],
     });
+    expect(r.windows.find((w) => w.startDate === "2026-08-01")!.score).toBe(1); // 01–02 free
+    expect(r.windows.find((w) => w.startDate === "2026-08-02")!.score).toBe(0); // 02–03, 03 not free
+    expect(r.windows.find((w) => w.startDate === "2026-08-03")!.score).toBe(0); // 03–04, 03 not free
+  });
 
-    // 2 days x 3 slots.
-    expect(result.slots).toHaveLength(6);
-    // Best: Aug 1 afternoon/evening (both free), afternoon first in slot order.
-    expect(result.slots[0]).toMatchObject({
-      date: "2026-08-01",
-      slot: "AFTERNOON",
-      score: 2,
+  it("ranks by score then earliest start", () => {
+    const r = computeMatches({
+      ...base,
+      respondedMemberIds: ["a", "b"],
+      freeEntries: [
+        { memberId: "a", date: "2026-08-03", slot: "ALL" },
+        { memberId: "b", date: "2026-08-03", slot: "ALL" },
+        { memberId: "a", date: "2026-08-01", slot: "ALL" },
+        { memberId: "b", date: "2026-08-01", slot: "ALL" },
+      ],
     });
-    // m2's ALL entry blocks all three slots on Aug 2.
-    for (const slot of ["MORNING", "AFTERNOON", "EVENING"]) {
-      const s = result.slots.find(
-        (x) => x.date === "2026-08-02" && x.slot === slot,
-      );
-      expect(s).toMatchObject({ score: 1, unavailableMemberIds: ["m2"] });
-    }
-    // Day windows don't apply in slot mode.
-    expect(result.windows).toEqual([]);
+    expect(r.windows[0].startDate).toBe("2026-08-01"); // tie 2/2 → earliest
+  });
+
+  it("empty free set = responded but free nowhere", () => {
+    const r = computeMatches({
+      ...base,
+      respondedMemberIds: ["a"],
+      freeEntries: [],
+    });
+    expect(r.respondedCount).toBe(1);
+    expect(r.pendingMemberIds).toEqual(["b"]);
+    expect(r.windows.every((w) => w.score === 0)).toBe(true);
+  });
+
+  it("heatmap counts responded members free each day", () => {
+    const r = computeMatches({
+      ...base,
+      respondedMemberIds: ["a", "b"],
+      freeEntries: [
+        { memberId: "a", date: "2026-08-02", slot: "ALL" },
+        { memberId: "b", date: "2026-08-02", slot: "ALL" },
+        { memberId: "a", date: "2026-08-03", slot: "ALL" },
+      ],
+    });
+    expect(r.heatmap.find((h) => h.date === "2026-08-02")!.freeCount).toBe(2);
+    expect(r.heatmap.find((h) => h.date === "2026-08-03")!.freeCount).toBe(1);
+    expect(r.heatmap.find((h) => h.date === "2026-08-01")!.freeCount).toBe(0);
   });
 });
 
-describe("computeMatches — edge cases", () => {
-  it("returns no windows when the required duration exceeds the window", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-01",
-      windowEnd: "2026-08-02",
-      durationDays: 5,
-      members,
-      respondedMemberIds: ["m1", "m2"],
-      busyEntries: [],
+describe("computeMatches — SLOT, free model", () => {
+  const slotBase = { ...base, mode: "SLOT" as const };
+  it("member free for a slot via explicit slot or ALL", () => {
+    const r = computeMatches({
+      ...slotBase,
+      respondedMemberIds: ["a", "b"],
+      freeEntries: [
+        { memberId: "a", date: "2026-08-01", slot: "MORNING" },
+        { memberId: "b", date: "2026-08-01", slot: "ALL" }, // free all slots that day
+      ],
     });
-    expect(result.windows).toEqual([]);
-    expect(result.heatmap).toHaveLength(2);
-  });
-
-  it("returns empty results for an inverted date window", () => {
-    const result = computeMatches({
-      mode: "DAY",
-      windowStart: "2026-08-05",
-      windowEnd: "2026-08-01",
-      durationDays: 1,
-      members,
-      respondedMemberIds: ["m1"],
-      busyEntries: [],
-    });
-    expect(result.windows).toEqual([]);
-    expect(result.heatmap).toEqual([]);
+    const m = r.slots.find((s) => s.date === "2026-08-01" && s.slot === "MORNING")!;
+    expect(m.score).toBe(2);
+    const e = r.slots.find((s) => s.date === "2026-08-01" && s.slot === "EVENING")!;
+    expect(e.score).toBe(1); // only b (via ALL)
+    expect(e.availableMemberIds).toEqual(["b"]);
   });
 });

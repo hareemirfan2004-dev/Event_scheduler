@@ -165,7 +165,7 @@ export default function EventPage({
         {tab === "mine" ? (
           identity ? (
             <AvailabilityEditor
-              key={payload.busyEntries.length /* remount after reload */}
+              key={payload.freeEntries.length /* remount after reload */}
               payload={payload}
               memberId={identity.memberId}
               token={identity.memberToken}

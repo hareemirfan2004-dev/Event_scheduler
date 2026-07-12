@@ -37,7 +37,7 @@ export async function GET(
         },
       },
       responses: { select: { memberId: true } },
-      busyEntries: { select: { memberId: true, date: true, slot: true } },
+      availability: { select: { memberId: true, date: true, slot: true } },
     },
   });
   if (!event) return jsonError(404, "Event not found");
@@ -49,10 +49,10 @@ export async function GET(
     durationDays: event.durationDays,
     members: event.group.members,
     respondedMemberIds: event.responses.map((r) => r.memberId),
-    busyEntries: event.busyEntries.map((b) => ({
-      memberId: b.memberId,
-      date: b.date,
-      slot: b.slot as Slot,
+    freeEntries: event.availability.map((a) => ({
+      memberId: a.memberId,
+      date: a.date,
+      slot: a.slot as Slot,
     })),
   });
 
@@ -71,7 +71,7 @@ export async function GET(
       code: event.group.code,
     },
     members: event.group.members,
-    busyEntries: event.busyEntries,
+    freeEntries: event.availability,
     results,
   });
 }

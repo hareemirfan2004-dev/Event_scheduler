@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client/api";
 import { saveIdentity } from "@/lib/client/identity";
+import { saveGroup } from "@/lib/client/groups";
 import { Button, Card, ErrorNote, TextInput } from "@/components/atoms";
 
 interface CreateResponse {
@@ -33,6 +34,12 @@ export function LandingForms() {
         memberId: data.memberId,
         memberName: memberName.trim(),
         memberToken: data.memberToken,
+      });
+      saveGroup({
+        code: data.group.code,
+        groupName: data.group.name,
+        memberName: memberName.trim(),
+        lastOpenedAt: Date.now(),
       });
       router.push(`/g/${data.group.code}`);
     } catch (err) {

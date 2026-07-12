@@ -24,34 +24,34 @@ model Group {
 }
 
 model Member {
-  id          String      @id @default(cuid())
-  groupId     String
-  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  name        String
-  token       String      @unique
-  createdAt   DateTime    @default(now())
-  responses   Response[]
-  busyEntries BusyEntry[]
+  id           String              @id @default(cuid())
+  groupId      String
+  group        Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name         String
+  token        String              @unique
+  createdAt    DateTime            @default(now())
+  responses    Response[]
+  availability AvailabilityEntry[]
 
   @@unique([groupId, name])
 }
 
 model Event {
-  id           String      @id @default(cuid())
+  id           String              @id @default(cuid())
   groupId      String
-  group        Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group        Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
   title        String
-  mode         String      @default("DAY") // "DAY" | "SLOT"
+  mode         String              @default("DAY") // "DAY" | "SLOT"
   windowStart  String // YYYY-MM-DD, first candidate date
   windowEnd    String // YYYY-MM-DD, last candidate date (inclusive)
-  durationDays Int         @default(1) // consecutive days needed (DAY mode)
-  createdAt    DateTime    @default(now())
+  durationDays Int                 @default(1) // consecutive days needed (DAY mode)
+  createdAt    DateTime            @default(now())
   responses    Response[]
-  busyEntries  BusyEntry[]
+  availability AvailabilityEntry[]
 }
 
-// A member has "responded" to an event once they save availability,
-// even if they marked nothing busy (= free the whole window).
+// A member has "responded" once they save, even if they marked nothing free
+// (= they can't make any of these dates).
 model Response {
   id          String   @id @default(cuid())
   eventId     String
@@ -63,15 +63,15 @@ model Response {
   @@unique([eventId, memberId])
 }
 
-// Only busy time is stored; anything unmarked is free.
-model BusyEntry {
+// Only FREE time is stored; a member is free on a day/slot iff a row exists.
+model AvailabilityEntry {
   id       String @id @default(cuid())
   eventId  String
   event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   memberId String
   member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
   date     String // YYYY-MM-DD
-  slot     String @default("ALL") // "ALL" (DAY mode) | "MORNING" | "AFTERNOON" | "EVENING"
+  slot     String @default("ALL") // "ALL" (free whole day) | "MORNING" | "AFTERNOON" | "EVENING"
 
   @@unique([eventId, memberId, date, slot])
   @@index([eventId])
