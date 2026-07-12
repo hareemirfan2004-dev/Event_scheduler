@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/db";
 
-export function jsonError(status: number, error: string) {
-  return Response.json({ error }, { status });
+export function jsonError(
+  status: number,
+  error: string,
+  headers?: Record<string, string>,
+) {
+  return Response.json({ error }, { status, headers });
 }
 
 /** Parse a JSON body, returning null on malformed input. */
