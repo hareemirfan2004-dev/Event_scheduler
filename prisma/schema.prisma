@@ -76,3 +76,11 @@ model AvailabilityEntry {
   @@unique([eventId, memberId, date, slot])
   @@index([eventId])
 }
+
+// Fixed-window rate-limit counters, keyed "<scope>:<ip>". No relations;
+// rows are reset in place per window and swept opportunistically after 24h.
+model RateLimit {
+  key         String   @id
+  windowStart DateTime
+  count       Int
+}
