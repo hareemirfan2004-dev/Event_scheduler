@@ -3,13 +3,12 @@
 import { useMemo, useState } from "react";
 import { monthsInRange } from "@/lib/calendar";
 import { fmtDate } from "@/lib/format";
-import { fillRange, weekendDays, toggleDays } from "@/lib/selection";
+import { fillRange, weekendDays, toggleDays, toggleSlot, SLOTS } from "@/lib/selection";
 import { api, ApiError } from "@/lib/client/api";
 import type { EventPayload } from "@/lib/client/types";
 import { ErrorNote } from "@/components/atoms";
 import { MonthCalendar } from "@/components/month-calendar";
 
-const SLOTS = ["MORNING", "AFTERNOON", "EVENING"] as const;
 const SLOT_LABEL: Record<(typeof SLOTS)[number], string> = {
   MORNING: "Morning", AFTERNOON: "Afternoon", EVENING: "Evening",
 };
@@ -55,34 +54,31 @@ export function AvailabilityEditor({
     [months],
   );
 
+  // Single funnel for every selection change: closes a stale empty-save
+  // confirm, disarms a pending range start, and only marks dirty when the
+  // selection actually changed — a no-op preset must not enable Save.
   function mutate(fn: (prev: Set<string>) => Set<string>) {
-    setFreeSet(fn);
+    setArmed(null);
+    setConfirmEmpty(false);
+    const next = fn(freeSet);
+    if (next.size === freeSet.size && [...next].every((k) => freeSet.has(k))) return;
+    setFreeSet(next);
     setDirty(true);
     setSavedFlash(false);
   }
 
   function tapDay(date: string) {
     if (rangeMode) {
-      if (armed == null) { setArmed(date); return; }
+      if (armed == null) { setArmed(date); setConfirmEmpty(false); return; }
       const span = fillRange(armed, date, windowDays);
-      mutate((prev) => { const n = new Set(prev); span.forEach((d) => n.add(d)); return n; });
-      setArmed(null); // re-arm for the next range
+      mutate((prev) => { const n = new Set(prev); span.forEach((d) => n.add(d)); return n; }); // disarms; re-arm with the next tap
       return;
     }
     mutate((prev) => { const n = new Set(prev); if (n.has(date)) n.delete(date); else n.add(date); return n; });
   }
 
   function tapSlot(key: string) {
-    // If the day is free via its "ALL" key (from "Free anytime"), expand it
-    // into the three individual slot keys first so this tap toggles for real
-    // instead of being masked by the still-present ALL entry.
-    const date = key.split("|")[0];
-    mutate((prev) => {
-      const n = new Set(prev);
-      if (n.delete(`${date}|ALL`)) for (const s of SLOTS) n.add(`${date}|${s}`);
-      if (n.has(key)) n.delete(key); else n.add(key);
-      return n;
-    });
+    mutate((prev) => toggleSlot(prev, key));
   }
 
   function freeAnytime() {
@@ -93,7 +89,7 @@ export function AvailabilityEditor({
     }
   }
   function pickWeekends() { mutate((prev) => toggleDays(prev, weekendDays(windowDays))); }
-  function clearAll() { mutate(() => new Set()); setArmed(null); }
+  function clearAll() { mutate(() => new Set()); }
   function toggleWeekRow(weekDates: string[]) { mutate((prev) => toggleDays(prev, weekDates)); }
 
   async function doSave() {
@@ -156,9 +152,9 @@ export function AvailabilityEditor({
           const isArmed = armed === cell.date;
           return (
             <button aria-pressed={free}
-              aria-label={`${fmtDate(cell.date)}${free ? " — free" : ""}`}
+              aria-label={`${fmtDate(cell.date)}${free ? " — free" : " — not free"}`}
               onClick={() => tapDay(cell.date)}
-              className={`flex aspect-square w-full items-center justify-center rounded-lg border font-mono text-sm ${
+              className={`day-cell flex aspect-square w-full items-center justify-center rounded-lg border font-mono text-sm ${
                 free ? "border-leaf-deep bg-leaf text-white"
                 : isArmed ? "border-2 border-dashed border-leaf bg-card text-leaf-deep"
                 : "border-hairline bg-card text-ink"
