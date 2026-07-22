@@ -24,11 +24,17 @@ let cache: SavedGroup[] | null = null;
 const listeners = new Set<() => void>();
 const EMPTY: SavedGroup[] = [];
 
-function read(): SavedGroup[] {
+// Guard against malformed or foreign data in the storage slot.
+export function parseGroups(raw: string | null): SavedGroup[] {
   try {
-    const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as SavedGroup[]) : [];
+    const val: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(val) ? (val as SavedGroup[]) : [];
   } catch { return []; }
+}
+
+function read(): SavedGroup[] {
+  try { return parseGroups(window.localStorage.getItem(KEY)); }
+  catch { return []; }
 }
 function write(list: SavedGroup[]) {
   window.localStorage.setItem(KEY, JSON.stringify(list));
