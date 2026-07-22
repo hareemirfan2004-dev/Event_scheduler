@@ -413,6 +413,74 @@ describe("PUT /api/events/[id]/availability", () => {
   });
 });
 
+describe("SLOT-mode round trip", () => {
+  it("saves free slots (incl. ALL) and ranks slots from them", async () => {
+    const { data } = await makeGroup();
+    const created = await createEvent(
+      jsonRequest(
+        `http://test/api/groups/${data.group.code}/events`,
+        "POST",
+        {
+          title: "Dinner",
+          mode: "SLOT",
+          windowStart: "2026-08-01",
+          windowEnd: "2026-08-03",
+        },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ code: data.group.code }),
+    );
+    const { event } = await created.json();
+
+    const save = await putAvailability(
+      jsonRequest(
+        `http://test/api/events/${event.id}/availability`,
+        "PUT",
+        {
+          freeSlots: [
+            { date: "2026-08-01", slot: "ALL" },
+            { date: "2026-08-02", slot: "MORNING" },
+          ],
+        },
+        { "x-member-token": data.memberToken },
+      ),
+      ctx({ id: event.id }),
+    );
+    expect(save.status).toBe(200);
+
+    const payload = await (
+      await getEvent(
+        new Request(`http://test/api/events/${event.id}`),
+        ctx({ id: event.id }),
+      )
+    ).json();
+
+    // Rows persist exactly as saved — ALL stays one row, no expansion.
+    const rows = payload.freeEntries
+      .map((e: { date: string; slot: string }) => `${e.date}|${e.slot}`)
+      .sort();
+    expect(rows).toEqual(["2026-08-01|ALL", "2026-08-02|MORNING"]);
+
+    // ALL frees every slot of its day; an individual slot only itself.
+    const score = (date: string, slot: string) =>
+      payload.results.slots.find(
+        (s: { date: string; slot: string }) => s.date === date && s.slot === slot,
+      )!.score;
+    expect(score("2026-08-01", "EVENING")).toBe(1);
+    expect(score("2026-08-02", "MORNING")).toBe(1);
+    expect(score("2026-08-02", "EVENING")).toBe(0);
+
+    // Ranking: earliest max-score slot first; DAY windows stay empty.
+    expect(payload.results.slots[0]).toMatchObject({
+      date: "2026-08-01",
+      slot: "MORNING",
+      score: 1,
+    });
+    expect(payload.results.windows).toEqual([]);
+    expect(payload.results.respondedCount).toBe(1);
+  });
+});
+
 describe("DELETE /api/events/[id]", () => {
   async function makeEventWithAvailability() {
     const { data } = await makeGroup();

@@ -75,6 +75,30 @@ describe("computeMatches — DAY, free model", () => {
     expect(r.windows.every((w) => w.score === 0)).toBe(true);
   });
 
+  it("duration longer than the window yields no candidate windows", () => {
+    const r = computeMatches({
+      ...base,
+      durationDays: 10, // window is only 5 days
+      respondedMemberIds: ["a"],
+      freeEntries: [{ memberId: "a", date: "2026-08-01", slot: "ALL" }],
+    });
+    expect(r.windows).toEqual([]);
+    expect(r.heatmap).toHaveLength(5); // heatmap still covers the window
+  });
+
+  it("inverted window (end before start) yields no days at all", () => {
+    const r = computeMatches({
+      ...base,
+      windowStart: "2026-08-05",
+      windowEnd: "2026-08-01",
+      respondedMemberIds: ["a"],
+      freeEntries: [],
+    });
+    expect(r.windows).toEqual([]);
+    expect(r.heatmap).toEqual([]);
+    expect(r.respondedCount).toBe(1);
+  });
+
   it("heatmap counts responded members free each day", () => {
     const r = computeMatches({
       ...base,
