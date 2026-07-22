@@ -61,6 +61,16 @@ describe("clientIp", () => {
     ).toBe("198.51.100.2");
     expect(clientIp(new Request("http://test/"))).toBe("local");
   });
+
+  it("caps forged header values at 64 chars", () => {
+    const long = "x".repeat(500);
+    expect(
+      clientIp(new Request("http://test/", { headers: { "x-forwarded-for": long } })).length,
+    ).toBeLessThanOrEqual(64);
+    expect(
+      clientIp(new Request("http://test/", { headers: { "x-real-ip": long } })).length,
+    ).toBeLessThanOrEqual(64);
+  });
 });
 
 describe("route guard: POST /api/groups", () => {
