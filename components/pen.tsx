@@ -11,8 +11,11 @@ export function StrikeX() {
 }
 
 export function PenCircle() {
+  // preserveAspectRatio="none": the circle hugs whatever it wraps — a
+  // square calendar cell or a wide results-list date — instead of scaling
+  // to the viewBox ratio and bleeding into neighboring rows.
   return (
-    <svg className="pen-circle" viewBox="0 0 64 40" aria-hidden="true">
+    <svg className="pen-circle" viewBox="0 0 64 40" preserveAspectRatio="none" aria-hidden="true">
       <ellipse cx="32" cy="20" rx="28" ry="15" />
     </svg>
   );

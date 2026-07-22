@@ -24,7 +24,7 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* --- Signature: red felt-pen strike for busy days --- */
+/* --- Tactile tap feedback on calendar day cells --- */
 .day-cell {
   position: relative;
   transition: transform 80ms ease;
@@ -32,32 +32,25 @@ body {
 .day-cell:active {
   transform: scale(0.9);
 }
-.day-cell .strike {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.day-cell .strike line {
-  stroke: var(--color-strike);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-dasharray: 40;
-  stroke-dashoffset: 40;
-}
-.day-cell[data-busy="true"] .strike line {
-  animation: draw-strike 160ms ease-out forwards;
-}
 
-@keyframes draw-strike {
-  to {
-    stroke-dashoffset: 0;
-  }
+/* Pre-hydration guard: the inline script in layout.tsx marks <html> when
+   saved groups exist, so returning users never see the marketing hero
+   flash before the hub hydrates in. */
+html[data-groups] .hide-if-groups {
+  display: none;
 }
 
 /* --- Signature: green pen circle for the found day --- */
 .pen-circle {
   position: absolute;
-  inset: -12%;
+  top: -20%;
+  left: -20%;
+  /* Explicit size: an svg is a replaced element, so with only inset set
+     its height would come from the viewBox ratio (width ÷ 1.6) and hang
+     far below short wide containers like the Best-dates rows. The 40%
+     overshoot keeps the stroke visible on paper around green cells. */
+  width: 140%;
+  height: 140%;
   pointer-events: none;
 }
 .pen-circle ellipse {
@@ -84,7 +77,6 @@ body {
     transition: none;
     transform: none;
   }
-  .day-cell[data-busy="true"] .strike line,
   .pen-circle ellipse {
     animation: none;
     stroke-dashoffset: 0;
