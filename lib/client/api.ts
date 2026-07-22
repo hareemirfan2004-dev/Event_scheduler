@@ -9,6 +9,19 @@ export class ApiError extends Error {
   }
 }
 
+// Turn a page-load failure into user copy: callers own the 404 wording,
+// the server's friendly 429 message passes through, everything else gets
+// the generic copy.
+export function loadErrorMessage(
+  err: unknown,
+  notFound: string,
+  generic: string,
+): string {
+  if (err instanceof ApiError && err.status === 404) return notFound;
+  if (err instanceof ApiError && err.status === 429) return err.message;
+  return generic;
+}
+
 interface Options {
   method?: string;
   body?: unknown;

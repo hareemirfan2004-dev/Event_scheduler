@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { removeGroup, useMyGroups, type SavedGroup } from "@/lib/client/groups";
+import { removeGroup, type SavedGroup } from "@/lib/client/groups";
 import { fmtDate } from "@/lib/format";
 import { Button, Card } from "@/components/atoms";
 import { LandingForms } from "@/components/landing-forms";
@@ -71,8 +71,7 @@ function GroupCard({ group }: { group: SavedGroup }) {
   );
 }
 
-export function MyGroups() {
-  const groups = useMyGroups();
+export function MyGroups({ groups }: { groups: SavedGroup[] }) {
   const [showForms, setShowForms] = useState(false);
 
   return (

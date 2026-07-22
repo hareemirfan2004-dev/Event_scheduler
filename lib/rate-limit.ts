@@ -27,15 +27,17 @@ export const POLICIES: Record<PolicyScope, RateLimitPolicy> = {
 // Client IP for rate-limit keying. On Vercel the first x-forwarded-for hop
 // is the client; dev servers and the handler-direct test harness have no
 // proxy headers and share one "local" bucket (accepted in the spec).
+// Values are capped at 64 chars: on Vercel the header is platform-set, but
+// off-Vercel a forged header must not become an unbounded DB key.
 export function clientIp(req: Request): string {
   try {
     const fwd = req.headers.get("x-forwarded-for");
     if (fwd) {
       const first = fwd.split(",")[0]?.trim();
-      if (first) return first;
+      if (first) return first.slice(0, 64);
     }
     const real = req.headers.get("x-real-ip")?.trim();
-    if (real) return real;
+    if (real) return real.slice(0, 64);
   } catch {
     // fall through to the shared local bucket
   }

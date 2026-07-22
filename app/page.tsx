@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { LandingForms } from "@/components/landing-forms";
 import { MyGroups } from "@/components/my-groups";
 import { PenCircle } from "@/components/pen";
@@ -21,7 +22,7 @@ function WeekMotif() {
       {days.map((d) => (
         <div
           key={d.n}
-          className={`day-cell relative flex h-11 w-11 items-center justify-center rounded-lg border font-mono text-sm ${
+          className={`relative flex h-11 w-11 items-center justify-center rounded-lg border font-mono text-sm ${
             d.free
               ? "border-leaf-deep bg-leaf text-white"
               : "border-hairline bg-card text-ink"
@@ -38,12 +39,19 @@ function WeekMotif() {
 export default function LandingPage() {
   const groups = useMyGroups();
 
+  // Keep the pre-hydration marker (set by the inline script in layout.tsx)
+  // truthful once React owns the page — removing the last group must
+  // reveal the hero again.
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-groups", groups.length > 0);
+  }, [groups.length]);
+
   if (groups.length > 0) {
-    return <MyGroups />;
+    return <MyGroups groups={groups} />;
   }
 
   return (
-    <main className="pt-14">
+    <main className="hide-if-groups pt-14">
       <p className="text-center font-mono text-sm tracking-[0.2em] text-leaf uppercase">
         Saath
       </p>
