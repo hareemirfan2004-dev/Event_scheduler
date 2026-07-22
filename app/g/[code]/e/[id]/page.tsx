@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/client/api";
+import { api, ApiError, loadErrorMessage } from "@/lib/client/api";
 import { useIdentity } from "@/lib/client/identity";
 import type { EventPayload } from "@/lib/client/types";
 import { fmtRange } from "@/lib/format";
@@ -93,9 +93,11 @@ export default function EventPage({
       setPayload(await api<EventPayload>(`/api/events/${id}`));
     } catch (err) {
       setLoadError(
-        err instanceof ApiError && err.status === 404
-          ? "This event doesn't exist (anymore)."
-          : "Could not load the event — try again.",
+        loadErrorMessage(
+          err,
+          "This event doesn't exist (anymore).",
+          "Could not load the event — try again.",
+        ),
       );
     }
   }, [id]);

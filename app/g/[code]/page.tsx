@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/client/api";
+import { api, ApiError, loadErrorMessage } from "@/lib/client/api";
 import { getIdentity, saveIdentity, useIdentity } from "@/lib/client/identity";
 import { saveGroup, touchGroup } from "@/lib/client/groups";
 import type { GroupPayload } from "@/lib/client/types";
@@ -146,9 +146,11 @@ export default function GroupPage({
       }
     } catch (err) {
       setLoadError(
-        err instanceof ApiError && err.status === 404
-          ? "No group has this code. Check the link and try again."
-          : "Could not load the group. Pull to refresh or try again.",
+        loadErrorMessage(
+          err,
+          "No group has this code. Check the link and try again.",
+          "Could not load the group. Pull to refresh or try again.",
+        ),
       );
     }
   }, [upperCode]);
