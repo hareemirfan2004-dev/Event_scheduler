@@ -10,9 +10,10 @@ question: **when can we all actually meet?**
 - Inside a group you create events ("Summer trip", "Eid dinner"). Each
   event has a date window and, for trips, how many days in a row you
   need.
-- Everyone crosses out the days (or morning/afternoon/evening slots)
-  they **can't** make. Saath ranks the dates where everyone — or the
-  most people — are free, and shows a green heatmap of the whole window.
+- Everyone taps the days (or morning/afternoon/evening slots) they
+  **can** make; anything left unmarked counts as busy. Saath ranks the
+  dates where everyone — or the most people — are free, and shows a
+  green heatmap of the whole window.
 
 The name is Urdu (ساتھ, "together"). To rename the app, search for
 "Saath" — it appears only in `app/layout.tsx` metadata, the landing
@@ -21,16 +22,21 @@ page, the two page headers, and the localStorage key prefix in
 
 ## Stack
 
-Next.js 16 (App Router, TypeScript), Tailwind CSS 4, Prisma 7 with
-driver adapters — SQLite locally, Postgres (Neon) in production —
-deployed on Vercel. No auth service; membership is a per-group token.
+Next.js 16 (App Router, TypeScript), Tailwind CSS 4, Prisma 7 with the
+Postgres driver adapter (`@prisma/adapter-pg`) against Neon, deployed on
+Vercel. Postgres is used everywhere, including local development and
+tests. No auth service; membership is a per-group token.
 
 ## Local development
 
+You need a Postgres database. The free Neon tier works: create a
+project, then a separate **branch** (e.g. `dev`) so local data never
+touches the production data.
+
 ```bash
-cp .env.example .env       # keeps the default SQLite URL
+cp .env.example .env       # then set DATABASE_URL to your dev branch's pooled string
 npm install                # also runs prisma generate
-npx prisma migrate dev     # creates prisma/dev.db
+npx prisma migrate deploy  # applies the committed migrations
 npm run dev                # http://localhost:3000
 ```
 
@@ -39,6 +45,9 @@ Run the tests (matching engine, calendar math, API routes):
 ```bash
 npm test
 ```
+
+The API and DB tests read `DATABASE_URL` from `.env` and write real
+rows, so point it at the dev branch, never at production.
 
 ## Deploying (free tier: GitHub + Vercel + Neon)
 
@@ -51,48 +60,33 @@ One-time setup, roughly 15 minutes:
 2. **Neon**: create a project (e.g. `saath`). Copy the **pooled**
    connection string (the hostname contains `-pooler`).
 
-3. **Switch the schema to Postgres** (local SQLite migrations don't
-   apply to Postgres, so regenerate them once against Neon):
-
-   ```bash
-   # in prisma/schema.prisma change:  provider = "sqlite"  →  "postgresql"
-   rm -r prisma/migrations
-   # put the Neon connection string in .env as DATABASE_URL, then:
-   npx prisma migrate dev --name init
-   npm run dev   # sanity-check the app now runs against Neon
-   git add -A && git commit -m "switch to postgres for production"
-   ```
-
-   (`lib/db.ts` picks the right driver adapter from the URL scheme
-   automatically.)
-
-4. **Push to GitHub**:
+3. **Push to GitHub**:
 
    ```bash
    gh repo create saath --private --source . --push
    # or create the repo on github.com and: git remote add origin <url> && git push -u origin main
    ```
 
-5. **Vercel**: *Add New Project* → import the repo → add environment
+4. **Vercel**: *Add New Project* → import the repo → add environment
    variable `DATABASE_URL` = the Neon pooled string → Deploy. The build
    runs `prisma generate && prisma migrate deploy && next build`, so the
-   database schema is applied automatically.
+   committed migrations in `prisma/migrations/` are applied automatically.
+   Never delete that folder: it is the schema history of the live
+   database.
 
-6. Open `https://<project>.vercel.app`, create your group, and share
+5. Open `https://<project>.vercel.app`, create your group, and share
    the invite link.
-
-After the switch, local `npm run dev` also talks to Postgres; create a
-second (free) Neon database or branch if you want dev data separate
-from the family's real data.
 
 ## How matching works
 
-Only *busy* entries are stored; unmarked time is free. A member counts
-once they've saved at least once (so "hasn't answered" ≠ "free all
-month"). For an event needing N days, every N-day window in the range
-is scored by how many responded members have no busy day inside it;
-ties go to the earliest date. Slot events score each date+slot combo
-the same way. See `lib/matching.ts` and `tests/matching.test.ts`.
+Only *free* entries are stored; unmarked time is busy. A member counts
+once they've saved at least once, even with nothing marked (so "hasn't
+answered" ≠ "can't make any date"). For an event needing N days, every
+N-day window in the range is scored by how many responded members are
+free on every day inside it; ties go to the earliest date. Slot events
+score each date+slot combo the same way, where marking a whole day free
+covers all three slots. See `lib/matching.ts` and
+`tests/matching.test.ts`.
 
 ## License
 
